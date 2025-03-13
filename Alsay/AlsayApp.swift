@@ -22,11 +22,14 @@ private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: 
     if event.type == .leftMouseDown {
         let currentTime = ProcessInfo.processInfo.systemUptime
         if currentTime - lastClickTime < 0.5 { // 双击时间阈值
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                if let text = delegate.getSelectedText(), !text.isEmpty {
+            if let selectedText = delegate.getSelectedText(), !selectedText.isEmpty {
+                // 获取点击位置
+                let clickLocation = NSPoint(x: CGFloat(event.location.x), y: CGFloat(event.location.y))
+                
+                // 检查是否在活跃窗口内
+                if let window = NSApplication.shared.mainWindow, window.frame.contains(clickLocation) {
                     // 检测是否包含中文字符
-                    // 更全面的中文字符检测
-                    let isChinese = text.unicodeScalars.contains { scalar in
+                    let isChinese = selectedText.unicodeScalars.contains { scalar in
                         // CJK统一汉字
                         (0x4E00...0x9FFF).contains(scalar.value) ||
                         // CJK扩展A区
@@ -37,9 +40,10 @@ private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: 
                         (0x3000...0x303F).contains(scalar.value)
                     }
                     
-                    print("选中文本: \(text)")
+                    print("选中文本: \(selectedText)")
                     print("是否包含中文: \(isChinese)")
-                    delegate.translateText(text: text, fromChinese: isChinese) { result in
+                    
+                    delegate.translateText(text: selectedText, fromChinese: isChinese) { result in
                         delegate.showNotification(title: "翻译结果", subtitle: result ?? "翻译失败")
                     }
                 }
@@ -64,7 +68,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func requestNotificationPermission() {
-        // 检查当前通知权限状态
         notificationCenter.getNotificationSettings { [weak self] settings in
             DispatchQueue.main.async {
                 switch settings.authorizationStatus {
@@ -73,8 +76,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 case .denied:
                     self?.showNotificationDeniedAlert()
                 case .notDetermined:
-                    // 首次请求权限
-                    self?.notificationCenter.requestAuthorization(options: [.alert, .sound]) { granted, error in
+                    self?.notificationCenter.requestAuthorization(options: [.alert, .sound]) { granted, _ in
                         DispatchQueue.main.async {
                             if granted {
                                 self?.setupEventTap()
@@ -117,11 +119,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func setupEventTap() {
-        let eventMask = CGEventMask(
-            (1 << CGEventType.leftMouseDown.rawValue)
-        )
-        
-        // Store self as userInfo for the callback
+        let eventMask = CGEventMask(1 << CGEventType.leftMouseDown.rawValue)
         let selfPtr = Unmanaged.passRetained(self).toOpaque()
         
         eventTap = CGEvent.tapCreate(
@@ -143,18 +141,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func showNotification(title: String, subtitle: String) {
         if subtitle.count > 100 {
-            // 长文本使用窗口显示
             DispatchQueue.main.async { [weak self] in
                 self?.showTranslationWindow(title: title, text: subtitle)
             }
         } else {
-            // 短文本使用通知
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = subtitle
             content.categoryIdentifier = "translation"
             
-            // 添加查看详情按钮
             let viewAction = UNNotificationAction(
                 identifier: "view",
                 title: "查看详情",
@@ -185,7 +180,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func showTranslationWindow(title: String, text: String) {
-        // 创建窗口
         if translationWindow == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 500, height: 300),
@@ -196,7 +190,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.title = title
             window.center()
             
-            // 创建文本视图
             let scrollView = NSScrollView(frame: window.contentView!.bounds)
             scrollView.hasVerticalScroller = true
             scrollView.autoresizingMask = [.width, .height]
@@ -210,7 +203,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             scrollView.documentView = textView
             window.contentView?.addSubview(scrollView)
             
-            // 添加复制按钮
             let copyButton = NSButton(frame: NSRect(x: 10, y: 10, width: 100, height: 30))
             copyButton.title = "复制"
             copyButton.bezelStyle = .rounded
@@ -237,7 +229,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let pasteboard = NSPasteboard.general
         let original = pasteboard.string(forType: .string)
         
-        // 模拟复制操作
         let source = CGEventSource(stateID: .hidSystemState)
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: true)
         let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: false)
@@ -329,7 +320,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }.resume()
     }
     
-    // MARK: - App Entry Point
     static func main() {
         let app = NSApplication.shared
         let delegate = AppDelegate()
@@ -341,12 +331,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
             eventTap = nil
-        }
-        // Release the retained self pointer
-        if let runLoop = CFRunLoopGetCurrent() {
-            CFRunLoopRemoveSource(runLoop, 
-                CFMachPortCreateRunLoopSource(nil, eventTap!, 0),
-                .commonModes)
         }
     }
 }
