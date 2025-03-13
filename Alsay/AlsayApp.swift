@@ -45,16 +45,46 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBar()
         checkAccessibilityPermissions()
-        
-        // 先请求通知权限
-        notificationCenter.requestAuthorization(options: [.alert, .sound]) { [weak self] granted, error in
-            if granted {
-                DispatchQueue.main.async {
+        requestNotificationPermission()
+    }
+    
+    func requestNotificationPermission() {
+        // 检查当前通知权限状态
+        notificationCenter.getNotificationSettings { [weak self] settings in
+            DispatchQueue.main.async {
+                switch settings.authorizationStatus {
+                case .authorized:
                     self?.setupEventTap()
+                case .denied:
+                    self?.showNotificationDeniedAlert()
+                case .notDetermined:
+                    // 首次请求权限
+                    self?.notificationCenter.requestAuthorization(options: [.alert, .sound]) { granted, error in
+                        DispatchQueue.main.async {
+                            if granted {
+                                self?.setupEventTap()
+                            } else {
+                                self?.showNotificationDeniedAlert()
+                            }
+                        }
+                    }
+                default:
+                    self?.showNotificationDeniedAlert()
                 }
-            } else {
-                print("需要通知权限来显示翻译结果")
             }
+        }
+    }
+    
+    func showNotificationDeniedAlert() {
+        let alert = NSAlert()
+        alert.messageText = "需要通知权限"
+        alert.informativeText = "请在系统设置中允许通知权限，以便显示翻译结果。\n设置 -> 通知 -> Alsay"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "打开系统设置")
+        alert.addButton(withTitle: "取消")
+        
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
         }
     }
     
