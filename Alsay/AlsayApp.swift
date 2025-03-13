@@ -9,6 +9,26 @@ import Cocoa
 import Foundation
 import UserNotifications
 
+private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent, refcon: UnsafeMutableRawPointer?) -> Unmanaged<CGEvent>? {
+    guard let refcon = refcon else {
+        return Unmanaged.passRetained(event)
+    }
+    
+    let delegate = Unmanaged<AppDelegate>.fromOpaque(refcon).takeUnretainedValue()
+    
+    if event.type == .leftMouseUp || event.type == .rightMouseUp {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if let text = delegate.getSelectedText() {
+                delegate.translateText(text: text) { result in
+                    delegate.showNotification(title: "翻译结果", subtitle: result ?? "翻译失败")
+                }
+            }
+        }
+    }
+    
+    return Unmanaged.passRetained(event)
+}
+
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
@@ -49,24 +69,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             (1 << CGEventType.rightMouseUp.rawValue)
         )
         
+        // Store self as userInfo for the callback
+        let selfPtr = Unmanaged.passRetained(self).toOpaque()
+        
         eventTap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
             eventsOfInterest: eventMask,
-            callback: { [weak self] _, _, event, _ in
-                if event.type == .leftMouseUp || event.type == .rightMouseUp {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        if let text = self?.getSelectedText() {
-                            self?.translateText(text: text) { result in
-                                self?.showNotification(title: "翻译结果", subtitle: result ?? "翻译失败")
-                            }
-                        }
-                    }
-                }
-                return Unmanaged.passRetained(event)
-            },
-            userInfo: nil)
+            callback: eventTapCallback,
+            userInfo: selfPtr)
         
         if let tap = eventTap {
             let runLoopSource = CFMachPortCreateRunLoopSource(nil, tap, 0)
@@ -153,5 +165,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let delegate = AppDelegate()
         app.delegate = delegate
         app.run()
+    }
+    
+    deinit {
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            eventTap = nil
+        }
+        // Release the retained self pointer
+        if let runLoop = CFRunLoopGetCurrent() {
+            CFRunLoopRemoveSource(runLoop, 
+                CFMachPortCreateRunLoopSource(nil, eventTap!, 0),
+                .commonModes)
+        }
     }
 }
