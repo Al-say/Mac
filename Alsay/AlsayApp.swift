@@ -22,29 +22,23 @@ private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: 
         let currentTime = ProcessInfo.processInfo.systemUptime
         if currentTime - lastClickTime < 0.5 { // 双击时间阈值
             if let selectedText = delegate.getSelectedText(), !selectedText.isEmpty {
-                // 获取点击位置
-                let clickLocation = NSPoint(x: CGFloat(event.location.x), y: CGFloat(event.location.y))
+                // 检测是否包含中文字符
+                let isChinese = selectedText.unicodeScalars.contains { scalar in
+                    // CJK统一汉字
+                    (0x4E00...0x9FFF).contains(scalar.value) ||
+                    // CJK扩展A区
+                    (0x3400...0x4DBF).contains(scalar.value) ||
+                    // CJK扩展B区
+                    (0x20000...0x2A6DF).contains(scalar.value) ||
+                    // 中文标点
+                    (0x3000...0x303F).contains(scalar.value)
+                }
                 
-                // 检查是否在活跃窗口内
-                if let window = NSApplication.shared.mainWindow, window.frame.contains(clickLocation) {
-                    // 检测是否包含中文字符
-                    let isChinese = selectedText.unicodeScalars.contains { scalar in
-                        // CJK统一汉字
-                        (0x4E00...0x9FFF).contains(scalar.value) ||
-                        // CJK扩展A区
-                        (0x3400...0x4DBF).contains(scalar.value) ||
-                        // CJK扩展B区
-                        (0x20000...0x2A6DF).contains(scalar.value) ||
-                        // 中文标点
-                        (0x3000...0x303F).contains(scalar.value)
-                    }
-                    
-                    print("选中文本: \(selectedText)")
-                    print("是否包含中文: \(isChinese)")
-                    
-                    delegate.translateText(text: selectedText, fromChinese: isChinese) { result in
-                        delegate.showNotification(title: "翻译结果", subtitle: result ?? "翻译失败")
-                    }
+                print("选中文本: \(selectedText)")
+                print("是否包含中文: \(isChinese)")
+                
+                delegate.translateText(text: selectedText, fromChinese: isChinese) { result in
+                    delegate.showNotification(title: "翻译结果", subtitle: result ?? "翻译失败")
                 }
             }
         }
