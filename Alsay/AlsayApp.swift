@@ -1,4 +1,4 @@
-//
+d//
 //  AlsayApp.swift
 //  Alsay
 //
@@ -121,17 +121,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let body: [String: Any] = ["text": text, "target_lang": "zh"]
+        let messages: [[String: Any]] = [
+            ["role": "system", "content": "你是一个翻译助手，请将用户输入的文本翻译成中文。只需要返回翻译结果，不要加任何解释。"],
+            ["role": "user", "content": text]
+        ]
+        
+        let body: [String: Any] = [
+            "model": "glm-4-plus",
+            "messages": messages,
+            "stream": false
+        ]
+        
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
         URLSession.shared.dataTask(with: request) { data, _, _ in
             guard let data = data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let result = json["translated_text"] as? String else {
+                  let choices = json["choices"] as? [[String: Any]],
+                  let firstChoice = choices.first,
+                  let message = firstChoice["message"] as? [String: Any],
+                  let content = message["content"] as? String else {
                 completion(nil)
                 return
             }
-            completion(result)
+            completion(content)
         }.resume()
     }
 }

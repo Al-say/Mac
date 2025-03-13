@@ -8,6 +8,6 @@
 struct Config {
     // 在此处填入您的智普清言API密钥
     static let apiKey = "YOUR_API_KEY"
-    // API端点，通常不需要修改
-    static let apiEndpoint = "https://api.智普清言.com/v1/translate"
+    // API端点
+    static let apiEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 }
