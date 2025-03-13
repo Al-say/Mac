@@ -45,14 +45,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBar()
         checkAccessibilityPermissions()
-        setupEventTap()
-        setupNotifications()
-    }
-    
-    func setupNotifications() {
-        notificationCenter.requestAuthorization(options: [.alert, .sound]) { granted, error in
-            if let error = error {
-                print("通知权限请求失败: \(error.localizedDescription)")
+        
+        // 先请求通知权限
+        notificationCenter.requestAuthorization(options: [.alert, .sound]) { [weak self] granted, error in
+            if granted {
+                DispatchQueue.main.async {
+                    self?.setupEventTap()
+                }
+            } else {
+                print("需要通知权限来显示翻译结果")
             }
         }
     }
@@ -152,17 +153,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            guard let data = data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let choices = json["choices"] as? [[String: Any]],
-                  let firstChoice = choices.first,
-                  let message = firstChoice["message"] as? [String: Any],
-                  let content = message["content"] as? String else {
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("API请求失败: \(error.localizedDescription)")
                 completion(nil)
                 return
             }
-            completion(content)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
+                print("服务器响应错误")
+                completion(nil)
+                return
+            }
+            
+            do {
+                guard let data = data,
+                      let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let choices = json["choices"] as? [[String: Any]],
+                      let firstChoice = choices.first,
+                      let message = firstChoice["message"] as? [String: Any],
+                      let content = message["content"] as? String else {
+                    print("解析响应数据失败")
+                    completion(nil)
+                    return
+                }
+                completion(content)
+            } catch {
+                print("JSON解析失败: \(error.localizedDescription)")
+                completion(nil)
+            }
         }.resume()
     }
     
