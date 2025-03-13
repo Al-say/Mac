@@ -192,10 +192,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.delegate = self
             translationWindow = window
         } else {
-            translationWindow?.title = title
-            if let scrollView = translationWindow?.contentView?.subviews.first(where: { $0 is NSScrollView }) as? NSScrollView,
-               let textView = scrollView.documentView as? NSTextView {
-                textView.string = text
+            if let window = translationWindow {
+                window.title = title
+                
+                // 获取鼠标位置
+                let mouseLocation = NSEvent.mouseLocation
+                let screenFrame = NSScreen.main?.frame ?? .zero
+                
+                // 计算新的窗口位置，确保窗口完全可见
+                let windowFrame = window.frame
+                var newOrigin = NSPoint(
+                    x: min(max(mouseLocation.x - windowFrame.width / 2, screenFrame.minX),
+                          screenFrame.maxX - windowFrame.width),
+                    y: min(max(mouseLocation.y - windowFrame.height / 2, screenFrame.minY),
+                          screenFrame.maxY - windowFrame.height)
+                )
+                window.setFrameOrigin(newOrigin)
+                
+                if let scrollView = window.contentView?.subviews.first(where: { $0 is NSScrollView }) as? NSScrollView,
+                   let textView = scrollView.documentView as? NSTextView {
+                    textView.string = text
+                }
             }
         }
         
