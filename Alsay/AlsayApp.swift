@@ -91,7 +91,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    var translationWindow: NSWindow?
+    var translationWindow: NSPanel?
     
     func showNotification(title: String, subtitle: String) {
         DispatchQueue.main.async { [weak self] in
