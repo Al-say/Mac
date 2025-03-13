@@ -101,14 +101,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func showTranslationWindow(title: String, text: String) {
         if translationWindow == nil {
-            let window = NSWindow(
+            let window = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 500, height: 300),
-                styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+                styleMask: [.titled, .closable, .resizable, .utilityWindow],
                 backing: .buffered,
                 defer: false
             )
             window.title = title
             window.center()
+            window.level = .floating
+            window.isFloatingPanel = true
+            window.worksWhenModal = true
             
             let scrollView = NSScrollView(frame: window.contentView!.bounds)
             scrollView.hasVerticalScroller = true
