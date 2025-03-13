@@ -124,19 +124,97 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
+    var translationWindow: NSWindow?
+    
     func showNotification(title: String, subtitle: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = subtitle
-        
-        let request = UNNotificationRequest(identifier: UUID().uuidString,
-                                          content: content,
-                                          trigger: nil)
-        
-        notificationCenter.add(request) { error in
-            if let error = error {
-                print("通知发送失败: \(error.localizedDescription)")
+        if subtitle.count > 100 {
+            // 长文本使用窗口显示
+            DispatchQueue.main.async { [weak self] in
+                self?.showTranslationWindow(title: title, text: subtitle)
             }
+        } else {
+            // 短文本使用通知
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = subtitle
+            content.categoryIdentifier = "translation"
+            
+            // 添加查看详情按钮
+            let viewAction = UNNotificationAction(
+                identifier: "view",
+                title: "查看详情",
+                options: .foreground
+            )
+            
+            let category = UNNotificationCategory(
+                identifier: "translation",
+                actions: [viewAction],
+                intentIdentifiers: [],
+                options: []
+            )
+            
+            notificationCenter.setNotificationCategories([category])
+            
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString,
+                content: content,
+                trigger: nil
+            )
+            
+            notificationCenter.add(request) { error in
+                if let error = error {
+                    print("通知发送失败: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    func showTranslationWindow(title: String, text: String) {
+        // 创建窗口
+        if translationWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 500, height: 300),
+                styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = title
+            window.center()
+            
+            // 创建文本视图
+            let scrollView = NSScrollView(frame: window.contentView!.bounds)
+            scrollView.hasVerticalScroller = true
+            scrollView.autoresizingMask = [.width, .height]
+            
+            let textView = NSTextView(frame: scrollView.bounds)
+            textView.autoresizingMask = [.width, .height]
+            textView.isEditable = false
+            textView.font = NSFont.systemFont(ofSize: 14)
+            textView.string = text
+            
+            scrollView.documentView = textView
+            window.contentView?.addSubview(scrollView)
+            
+            // 添加复制按钮
+            let copyButton = NSButton(frame: NSRect(x: 10, y: 10, width: 100, height: 30))
+            copyButton.title = "复制"
+            copyButton.bezelStyle = .rounded
+            copyButton.target = self
+            copyButton.action = #selector(copyTranslation)
+            window.contentView?.addSubview(copyButton)
+            
+            translationWindow = window
+        }
+        
+        translationWindow?.makeKeyAndOrderFront(nil)
+    }
+    
+    @objc func copyTranslation() {
+        if let window = translationWindow,
+           let scrollView = window.contentView?.subviews.first as? NSScrollView,
+           let textView = scrollView.documentView as? NSTextView {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(textView.string, forType: .string)
         }
     }
     
