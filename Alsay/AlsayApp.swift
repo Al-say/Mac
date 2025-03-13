@@ -25,12 +25,20 @@ private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 if let text = delegate.getSelectedText(), !text.isEmpty {
                     // 检测是否包含中文字符
-                    let isChinese = text.contains { char in
-                        let scalars = String(char).unicodeScalars
-                        return scalars.contains { scalar in
-                            (0x4E00...0x9FFF).contains(scalar.value) // 常用汉字范围
-                        }
+                    // 更全面的中文字符检测
+                    let isChinese = text.unicodeScalars.contains { scalar in
+                        // CJK统一汉字
+                        (0x4E00...0x9FFF).contains(scalar.value) ||
+                        // CJK扩展A区
+                        (0x3400...0x4DBF).contains(scalar.value) ||
+                        // CJK扩展B区
+                        (0x20000...0x2A6DF).contains(scalar.value) ||
+                        // 中文标点
+                        (0x3000...0x303F).contains(scalar.value)
                     }
+                    
+                    print("选中文本: \(text)")
+                    print("是否包含中文: \(isChinese)")
                     delegate.translateText(text: text, fromChinese: isChinese) { result in
                         delegate.showNotification(title: "翻译结果", subtitle: result ?? "翻译失败")
                     }
@@ -255,9 +263,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
+        print("开始翻译，方向: \(fromChinese ? "中译英" : "英译中")")
         let systemPrompt = fromChinese ?
-            "你是一个翻译助手。请将用户输入的中文文本翻译成英文。不要添加任何解释或格式，保持原文的段落结构。翻译时要准确、地道。" :
-            "你是一个翻译助手。请将用户输入的文本翻译成中文。不要添加任何解释或格式，保持原文的段落结构。翻译时要准确、通顺。"
+            "You are a translator. Translate the Chinese text into English. Keep it natural and idiomatic. Maintain paragraph structure. Do not add any explanations or formatting." :
+            "你是一个翻译助手。请将用户输入的文本翻译成中文。要准确、通顺、符合中文表达习惯。保持原文的段落结构。不要添加解释或额外格式。"
         
         let messages: [[String: Any]] = [
             ["role": "system", "content": systemPrompt],
