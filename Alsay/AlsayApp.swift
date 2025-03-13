@@ -154,7 +154,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             translationWindow = window
         } else {
             translationWindow?.title = title
-            if let scrollView = translationWindow?.contentView?.subviews.first as? NSScrollView,
+            if let scrollView = translationWindow?.contentView?.subviews.first(where: { $0 is NSScrollView }) as? NSScrollView,
                let textView = scrollView.documentView as? NSTextView {
                 textView.string = text
             }
@@ -165,7 +165,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc func copyTranslation() {
         if let window = translationWindow,
-           let scrollView = window.contentView?.subviews.first as? NSScrollView,
+           let scrollView = window.contentView?.subviews.first(where: { $0 is NSScrollView }) as? NSScrollView,
            let textView = scrollView.documentView as? NSTextView {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(textView.string, forType: .string)
