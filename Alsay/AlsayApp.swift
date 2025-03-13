@@ -62,6 +62,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func setupStatusBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "译"
+        
+        let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "测试API", action: #selector(testAPI), keyEquivalent: "t"))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        statusItem.menu = menu
+    }
+    
+    @objc func testAPI() {
+        translateText(text: "测试", fromChinese: true) { result in
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                if result != nil {
+                    alert.messageText = "API测试成功"
+                    alert.informativeText = "翻译服务工作正常"
+                } else {
+                    alert.messageText = "API测试失败"
+                    alert.informativeText = "无法连接到翻译服务，请检查API密钥和网络连接"
+                    alert.alertStyle = .warning
+                }
+                alert.runModal()
+            }
+        }
     }
     
     func checkAccessibilityPermissions() {
