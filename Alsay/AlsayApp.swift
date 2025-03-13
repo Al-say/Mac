@@ -9,6 +9,8 @@ import Cocoa
 import Foundation
 import UserNotifications
 
+private var lastClickTime: TimeInterval = 0
+
 private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent, refcon: UnsafeMutableRawPointer?) -> Unmanaged<CGEvent>? {
     guard let refcon = refcon else {
         return Unmanaged.passRetained(event)
@@ -16,14 +18,19 @@ private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: 
     
     let delegate = Unmanaged<AppDelegate>.fromOpaque(refcon).takeUnretainedValue()
     
-    if event.type == .leftMouseUp || event.type == .rightMouseUp {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            if let text = delegate.getSelectedText() {
-                delegate.translateText(text: text) { result in
-                    delegate.showNotification(title: "翻译结果", subtitle: result ?? "翻译失败")
+    // 处理双击
+    if event.type == .leftMouseDown {
+        let currentTime = ProcessInfo.processInfo.systemUptime
+        if currentTime - lastClickTime < 0.5 { // 双击时间阈值
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                if let text = delegate.getSelectedText() {
+                    delegate.translateText(text: text) { result in
+                        delegate.showNotification(title: "翻译结果", subtitle: result ?? "翻译失败")
+                    }
                 }
             }
         }
+        lastClickTime = currentTime
     }
     
     return Unmanaged.passRetained(event)
@@ -65,8 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func setupEventTap() {
         let eventMask = CGEventMask(
-            (1 << CGEventType.leftMouseUp.rawValue) |
-            (1 << CGEventType.rightMouseUp.rawValue)
+            (1 << CGEventType.leftMouseDown.rawValue)
         )
         
         // Store self as userInfo for the callback
@@ -159,6 +165,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             completion(content)
         }.resume()
     }
+    
     // MARK: - App Entry Point
     static func main() {
         let app = NSApplication.shared
