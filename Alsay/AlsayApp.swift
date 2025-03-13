@@ -113,7 +113,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func translateText(text: String, completion: @escaping (String?) -> Void) {
-        let apiKey = "03b9acb38b27464ea13f37481f15bc35.l8fH8VstLyvhb1tx"
+        let apiKey = "YOUR_API_KEY" // 在此处填入您的API密钥
         let url = URL(string: "https://api.智普清言.com/v1/translate")! // 替换为实际API端点
         
         var request = URLRequest(url: url)
