@@ -171,14 +171,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let messages: [[String: Any]] = [
-            ["role": "system", "content": "你是一个翻译助手，请将用户输入的文本翻译成中文。只需要返回翻译结果，不要加任何解释。"],
+            ["role": "system", "content": "你是一个翻译助手。请将用户输入的文本翻译成中文。不要添加任何解释、标点符号或格式，只返回翻译结果。对于长文本，保持原文的段落结构。"],
             ["role": "user", "content": text]
         ]
         
         let body: [String: Any] = [
             "model": "glm-4-plus",
             "messages": messages,
-            "stream": false
+            "stream": false,
+            "temperature": 0.3,
+            "max_tokens": 8000,
+            "top_p": 0.7
         ]
         
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
@@ -190,9 +193,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
+            guard let httpResponse = response as? HTTPURLResponse else {
                 print("服务器响应错误")
+                completion(nil)
+                return
+            }
+            
+            if !(200...299).contains(httpResponse.statusCode) {
+                if let data = data,
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let error = json["error"] as? [String: Any],
+                   let message = error["message"] as? String {
+                    print("API错误: \(message)")
+                } else {
+                    print("服务器响应错误: \(httpResponse.statusCode)")
+                }
                 completion(nil)
                 return
             }
