@@ -113,7 +113,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.isFloatingPanel = true
             window.worksWhenModal = true
             
-            let scrollView = NSScrollView(frame: window.contentView!.bounds)
+            let containerView = NSView(frame: window.contentView!.bounds)
+            containerView.autoresizingMask = [.width, .height]
+            
+            let buttonHeight: CGFloat = 30
+            let buttonMargin: CGFloat = 10
+            
+            let copyButton = NSButton(frame: NSRect(
+                x: buttonMargin,
+                y: buttonMargin,
+                width: 100,
+                height: buttonHeight
+            ))
+            copyButton.title = "复制"
+            copyButton.bezelStyle = .rounded
+            copyButton.target = self
+            copyButton.action = #selector(copyTranslation)
+            
+            let scrollView = NSScrollView(frame: NSRect(
+                x: 0,
+                y: buttonHeight + buttonMargin * 2,
+                width: containerView.bounds.width,
+                height: containerView.bounds.height - (buttonHeight + buttonMargin * 2)
+            ))
             scrollView.hasVerticalScroller = true
             scrollView.autoresizingMask = [.width, .height]
             
@@ -124,14 +146,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             textView.string = text
             
             scrollView.documentView = textView
-            window.contentView?.addSubview(scrollView)
             
-            let copyButton = NSButton(frame: NSRect(x: 10, y: 10, width: 100, height: 30))
-            copyButton.title = "复制"
-            copyButton.bezelStyle = .rounded
-            copyButton.target = self
-            copyButton.action = #selector(copyTranslation)
-            window.contentView?.addSubview(copyButton)
+            containerView.addSubview(scrollView)
+            containerView.addSubview(copyButton)
+            window.contentView = containerView
             
             translationWindow = window
         } else {
