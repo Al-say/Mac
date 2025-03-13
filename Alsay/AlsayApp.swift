@@ -143,9 +143,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             )
             window.title = title
             window.center()
-            window.level = .floating
+            window.level = .modalPanel // 使用更高的窗口层级
             window.isFloatingPanel = true
             window.worksWhenModal = true
+            window.canBecomeVisibleWithoutLogin = true
+            window.hidesOnDeactivate = false // 防止切换应用时隐藏
+            window.becomesKeyOnlyIfNeeded = true
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
             
             let containerView = NSView(frame: window.contentView!.bounds)
             containerView.autoresizingMask = [.width, .height]
