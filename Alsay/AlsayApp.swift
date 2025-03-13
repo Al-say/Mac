@@ -23,8 +23,15 @@ private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: 
         let currentTime = ProcessInfo.processInfo.systemUptime
         if currentTime - lastClickTime < 0.5 { // 双击时间阈值
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                if let text = delegate.getSelectedText() {
-                    delegate.translateText(text: text) { result in
+                if let text = delegate.getSelectedText(), !text.isEmpty {
+                    // 检测是否包含中文字符
+                    let isChinese = text.contains { char in
+                        let scalars = String(char).unicodeScalars
+                        return scalars.contains { scalar in
+                            (0x4E00...0x9FFF).contains(scalar.value) // 常用汉字范围
+                        }
+                    }
+                    delegate.translateText(text: text, fromChinese: isChinese) { result in
                         delegate.showNotification(title: "翻译结果", subtitle: result ?? "翻译失败")
                     }
                 }
@@ -239,7 +246,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return selectedText
     }
     
-    func translateText(text: String, completion: @escaping (String?) -> Void) {
+    func translateText(text: String, fromChinese: Bool, completion: @escaping (String?) -> Void) {
         let apiKey = Config.apiKey
         let url = URL(string: Config.apiEndpoint)!
         
@@ -248,8 +255,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
+        let systemPrompt = fromChinese ?
+            "你是一个翻译助手。请将用户输入的中文文本翻译成英文。不要添加任何解释或格式，保持原文的段落结构。翻译时要准确、地道。" :
+            "你是一个翻译助手。请将用户输入的文本翻译成中文。不要添加任何解释或格式，保持原文的段落结构。翻译时要准确、通顺。"
+        
         let messages: [[String: Any]] = [
-            ["role": "system", "content": "你是一个翻译助手。请将用户输入的文本翻译成中文。不要添加任何解释、标点符号或格式，只返回翻译结果。对于长文本，保持原文的段落结构。"],
+            ["role": "system", "content": systemPrompt],
             ["role": "user", "content": text]
         ]
         
