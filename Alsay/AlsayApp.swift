@@ -49,7 +49,7 @@ private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: 
 }
 
 @main
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var statusItem: NSStatusItem!
     var eventTap: CFMachPort?
     
@@ -57,6 +57,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupStatusBar()
         checkAccessibilityPermissions()
         setupEventTap()
+        NSApp.setActivationPolicy(.accessory)
+    }
+    
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        return true
+    }
+    
+    func windowWillClose(_ notification: Notification) {
+        if let window = notification.object as? NSPanel {
+            window.orderOut(nil)
+        }
     }
     
     func setupStatusBar() {
@@ -174,6 +185,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             containerView.addSubview(copyButton)
             window.contentView = containerView
             
+            window.delegate = self
             translationWindow = window
         } else {
             translationWindow?.title = title
