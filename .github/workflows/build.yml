@@ -1,0 +1,61 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v2
+      
+    - name: Set up Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+        
+    - name: Create Config File
+      run: |
+        echo "//
+        //  Config.swift
+        //  Alsay
+        //
+        struct Config {
+            static let apiKey = \"${{ secrets.API_KEY }}\"
+            static let apiEndpoint = \"https://open.bigmodel.cn/api/paas/v4/chat/completions\"
+        }" > Alsay/Config.swift
+
+    - name: Build
+      run: |
+        xcodebuild -scheme Alsay -configuration Release clean build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+
+    - name: Create DMG
+      run: |
+        mkdir -p build/release
+        cd build/Release
+        create-dmg \
+          --volname "Alsay" \
+          --window-pos 200 120 \
+          --window-size 800 400 \
+          --icon-size 100 \
+          --icon "Alsay.app" 200 190 \
+          --hide-extension "Alsay.app" \
+          --app-drop-link 600 185 \
+          "Alsay.dmg" \
+          "Alsay.app"
+
+    - name: Create Release
+      if: github.ref == 'refs/heads/master'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/Release/Alsay.dmg
+        tag_name: v${{ github.run_number }}
+        name: Release v${{ github.run_number }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
