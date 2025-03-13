@@ -1,4 +1,4 @@
-d//
+//
 //  AlsayApp.swift
 //  Alsay
 //
@@ -147,10 +147,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             completion(content)
         }.resume()
     }
+    // MARK: - App Entry Point
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.run()
+    }
 }
-
-// 启动应用
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-app.run()
