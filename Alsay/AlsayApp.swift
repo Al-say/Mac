@@ -7,7 +7,6 @@
 
 import Cocoa
 import Foundation
-import UserNotifications
 
 private var lastClickTime: TimeInterval = 0
 
@@ -59,50 +58,11 @@ private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var eventTap: CFMachPort?
-    let notificationCenter = UNUserNotificationCenter.current()
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBar()
         checkAccessibilityPermissions()
-        requestNotificationPermission()
-    }
-    
-    func requestNotificationPermission() {
-        notificationCenter.getNotificationSettings { [weak self] settings in
-            DispatchQueue.main.async {
-                switch settings.authorizationStatus {
-                case .authorized:
-                    self?.setupEventTap()
-                case .denied:
-                    self?.showNotificationDeniedAlert()
-                case .notDetermined:
-                    self?.notificationCenter.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-                        DispatchQueue.main.async {
-                            if granted {
-                                self?.setupEventTap()
-                            } else {
-                                self?.showNotificationDeniedAlert()
-                            }
-                        }
-                    }
-                default:
-                    self?.showNotificationDeniedAlert()
-                }
-            }
-        }
-    }
-    
-    func showNotificationDeniedAlert() {
-        let alert = NSAlert()
-        alert.messageText = "需要通知权限"
-        alert.informativeText = "请在系统设置中允许通知权限，以便显示翻译结果。\n设置 -> 通知 -> Alsay"
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "打开系统设置")
-        alert.addButton(withTitle: "取消")
-        
-        if alert.runModal() == .alertFirstButtonReturn {
-            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
-        }
+        setupEventTap()
     }
     
     func setupStatusBar() {
@@ -140,42 +100,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var translationWindow: NSWindow?
     
     func showNotification(title: String, subtitle: String) {
-        if subtitle.count > 100 {
-            DispatchQueue.main.async { [weak self] in
-                self?.showTranslationWindow(title: title, text: subtitle)
-            }
-        } else {
-            let content = UNMutableNotificationContent()
-            content.title = title
-            content.body = subtitle
-            content.categoryIdentifier = "translation"
-            
-            let viewAction = UNNotificationAction(
-                identifier: "view",
-                title: "查看详情",
-                options: .foreground
-            )
-            
-            let category = UNNotificationCategory(
-                identifier: "translation",
-                actions: [viewAction],
-                intentIdentifiers: [],
-                options: []
-            )
-            
-            notificationCenter.setNotificationCategories([category])
-            
-            let request = UNNotificationRequest(
-                identifier: UUID().uuidString,
-                content: content,
-                trigger: nil
-            )
-            
-            notificationCenter.add(request) { error in
-                if let error = error {
-                    print("通知发送失败: \(error.localizedDescription)")
-                }
-            }
+        DispatchQueue.main.async { [weak self] in
+            self?.showTranslationWindow(title: title, text: subtitle)
         }
     }
     
@@ -211,6 +137,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.contentView?.addSubview(copyButton)
             
             translationWindow = window
+        } else {
+            translationWindow?.title = title
+            if let scrollView = translationWindow?.contentView?.subviews.first as? NSScrollView,
+               let textView = scrollView.documentView as? NSTextView {
+                textView.string = text
+            }
         }
         
         translationWindow?.makeKeyAndOrderFront(nil)

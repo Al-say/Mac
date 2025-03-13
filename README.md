@@ -30,7 +30,7 @@ git clone https://github.com/Al-say/Mac.git
    - 在`Config.swift`中填入您的API密钥
 
 3. 配置GitHub Actions密钥：
-   - 在仓库设置中添加Secret: `API_KEY`
+   - 在仓库设置中添加Secret: `ZHIPUAI_API_KEY`
    - 值为您的智普清言API密钥
 
 ## 使用方法

@@ -6,8 +6,8 @@
 //
 
 struct Config {
-    // 在此处填入您的智普清言API密钥
+    // 在此处填入您的智普API密钥
     static let apiKey = "YOUR_API_KEY"
-    // API端点
+    // GLM-4-Plus API端点
     static let apiEndpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 }
