@@ -8,7 +8,9 @@
 import Cocoa
 import Foundation
 
-private var lastClickTime: TimeInterval = 0
+private var isMouseDown = false
+private var lastMouseUpTime: TimeInterval = 0
+private let selectionDelay: TimeInterval = 0.1  // 选择文本后等待翻译的时间
 
 private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent, refcon: UnsafeMutableRawPointer?) -> Unmanaged<CGEvent>? {
     guard let refcon = refcon else {
@@ -17,10 +19,20 @@ private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: 
     
     let delegate = Unmanaged<AppDelegate>.fromOpaque(refcon).takeUnretainedValue()
     
-    // 处理双击
-    if event.type == .leftMouseDown {
+    switch event.type {
+    case .leftMouseDown:
+        isMouseDown = true
+    case .leftMouseUp:
+        isMouseDown = false
         let currentTime = ProcessInfo.processInfo.systemUptime
-        if currentTime - lastClickTime < 0.5 { // 双击时间阈值
+        lastMouseUpTime = currentTime
+        
+        // 延迟一小段时间后检查是否有选中的文本
+        DispatchQueue.main.asyncAfter(deadline: .now() + selectionDelay) {
+            let checkTime = ProcessInfo.processInfo.systemUptime
+            // 确保这是最近的鼠标释放事件
+            guard checkTime - lastMouseUpTime >= selectionDelay else { return }
+            
             if let selectedText = delegate.getSelectedText(), !selectedText.isEmpty {
                 // 检测是否包含中文字符
                 let isChinese = selectedText.unicodeScalars.contains { scalar in
@@ -37,37 +49,74 @@ private func eventTapCallback(proxy: CGEventTapProxy, type: CGEventType, event: 
                 print("选中文本: \(selectedText)")
                 print("是否包含中文: \(isChinese)")
                 
+                // 直接开始翻译
                 delegate.translateText(text: selectedText, fromChinese: isChinese) { result in
-                    delegate.showNotification(title: "翻译结果", subtitle: result ?? "翻译失败")
+                    if let result = result {
+                        DispatchQueue.main.async {
+                            delegate.showNotification(title: "翻译结果", text: result)
+                        }
+                    }
                 }
             }
         }
-        lastClickTime = currentTime
+    default:
+        break
     }
     
     return Unmanaged.passRetained(event)
 }
 
 @main
-class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDelegate {
     var statusItem: NSStatusItem!
     var eventTap: CFMachPort?
+    var eventTapRunLoopSource: CFRunLoopSource?
+    private var isTranslatingFromChinese: Bool = false
+    private var lastTranslation: String?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBar()
         checkAccessibilityPermissions()
         setupEventTap()
+        setupNotificationCenter()
         NSApp.setActivationPolicy(.accessory)
     }
     
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    func applicationWillTerminate(_ notification: Notification) {
+        cleanupEventTap()
+    }
+    
+    func setupNotificationCenter() {
+        let center = NSUserNotificationCenter.default
+        center.delegate = self
+    }
+    
+    // 允许显示通知，即使应用在前台
+    func userNotificationCenter(_ center: NSUserNotificationCenter, shouldPresent notification: NSUserNotification) -> Bool {
         return true
     }
     
-    func windowWillClose(_ notification: Notification) {
-        if let window = notification.object as? NSPanel {
-            window.orderOut(nil)
+    // 处理通知操作
+    func userNotificationCenter(_ center: NSUserNotificationCenter, didActivate notification: NSUserNotification) {
+        if notification.actionButtonTitle == "复制" {
+            if let translatedText = lastTranslation {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(translatedText, forType: .string)
+            }
         }
+    }
+    
+    func showNotification(title: String, text: String) {
+        lastTranslation = text
+        
+        let notification = NSUserNotification()
+        notification.title = title
+        notification.informativeText = text
+        notification.hasActionButton = true
+        notification.actionButtonTitle = "复制"
+        notification.soundName = nil  // 不播放声音
+        
+        NSUserNotificationCenter.default.deliver(notification)
     }
     
     func setupStatusBar() {
@@ -107,8 +156,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     
     func setupEventTap() {
-        let eventMask = CGEventMask(1 << CGEventType.leftMouseDown.rawValue)
-        let selfPtr = Unmanaged.passRetained(self).toOpaque()
+        let eventMask = CGEventMask(1 << CGEventType.leftMouseDown.rawValue | 1 << CGEventType.leftMouseUp.rawValue)
+        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
         
         eventTap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -119,113 +168,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             userInfo: selfPtr)
         
         if let tap = eventTap {
-            let runLoopSource = CFMachPortCreateRunLoopSource(nil, tap, 0)
-            CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-            CGEvent.tapEnable(tap: tap, enable: true)
-        }
-    }
-    
-    var translationWindow: NSPanel?
-    
-    func showNotification(title: String, subtitle: String) {
-        DispatchQueue.main.async { [weak self] in
-            self?.showTranslationWindow(title: title, text: subtitle)
-        }
-    }
-    
-    func showTranslationWindow(title: String, text: String) {
-        if translationWindow == nil {
-            let window = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 500, height: 300),
-                styleMask: [.titled, .closable, .resizable, .utilityWindow],
-                backing: .buffered,
-                defer: false
-            )
-            window.title = title
-            window.center()
-            window.level = .modalPanel // 使用更高的窗口层级
-            window.isFloatingPanel = true
-            window.worksWhenModal = true
-            window.canBecomeVisibleWithoutLogin = true
-            window.hidesOnDeactivate = false // 防止切换应用时隐藏
-            window.becomesKeyOnlyIfNeeded = true
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-            
-            let containerView = NSView(frame: window.contentView!.bounds)
-            containerView.autoresizingMask = [.width, .height]
-            
-            let buttonHeight: CGFloat = 30
-            let buttonMargin: CGFloat = 10
-            
-            let copyButton = NSButton(frame: NSRect(
-                x: buttonMargin,
-                y: buttonMargin,
-                width: 100,
-                height: buttonHeight
-            ))
-            copyButton.title = "复制"
-            copyButton.bezelStyle = .rounded
-            copyButton.target = self
-            copyButton.action = #selector(copyTranslation)
-            
-            let scrollView = NSScrollView(frame: NSRect(
-                x: 0,
-                y: buttonHeight + buttonMargin * 2,
-                width: containerView.bounds.width,
-                height: containerView.bounds.height - (buttonHeight + buttonMargin * 2)
-            ))
-            scrollView.hasVerticalScroller = true
-            scrollView.autoresizingMask = [.width, .height]
-            
-            let textView = NSTextView(frame: scrollView.bounds)
-            textView.autoresizingMask = [.width, .height]
-            textView.isEditable = false
-            textView.font = NSFont.systemFont(ofSize: 14)
-            textView.string = text
-            
-            scrollView.documentView = textView
-            
-            containerView.addSubview(scrollView)
-            containerView.addSubview(copyButton)
-            window.contentView = containerView
-            
-            window.delegate = self
-            translationWindow = window
-        } else {
-            if let window = translationWindow {
-                window.title = title
-                
-                // 获取鼠标位置
-                let mouseLocation = NSEvent.mouseLocation
-                let screenFrame = NSScreen.main?.frame ?? .zero
-                
-                // 计算新的窗口位置，确保窗口完全可见
-                let windowFrame = window.frame
-                var newOrigin = NSPoint(
-                    x: min(max(mouseLocation.x - windowFrame.width / 2, screenFrame.minX),
-                          screenFrame.maxX - windowFrame.width),
-                    y: min(max(mouseLocation.y - windowFrame.height / 2, screenFrame.minY),
-                          screenFrame.maxY - windowFrame.height)
-                )
-                window.setFrameOrigin(newOrigin)
-                
-                if let scrollView = window.contentView?.subviews.first(where: { $0 is NSScrollView }) as? NSScrollView,
-                   let textView = scrollView.documentView as? NSTextView {
-                    textView.string = text
-                }
+            eventTapRunLoopSource = CFMachPortCreateRunLoopSource(nil, tap, 0)
+            if let runLoopSource = eventTapRunLoopSource {
+                CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+                CGEvent.tapEnable(tap: tap, enable: true)
             }
         }
-        
-        translationWindow?.makeKeyAndOrderFront(nil)
     }
     
-    @objc func copyTranslation() {
-        if let window = translationWindow,
-           let scrollView = window.contentView?.subviews.first(where: { $0 is NSScrollView }) as? NSScrollView,
-           let textView = scrollView.documentView as? NSTextView {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(textView.string, forType: .string)
+    func cleanupEventTap() {
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
         }
+        if let runLoopSource = eventTapRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+        }
+        eventTap = nil
+        eventTapRunLoopSource = nil
     }
     
     func getSelectedText() -> String? {
@@ -323,17 +282,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }.resume()
     }
     
+    // 保持对delegate的强引用
+    private static var sharedDelegate: AppDelegate!
+    
     static func main() {
         let app = NSApplication.shared
-        let delegate = AppDelegate()
-        app.delegate = delegate
+        sharedDelegate = AppDelegate()
+        app.delegate = sharedDelegate
         app.run()
     }
     
     deinit {
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-            eventTap = nil
-        }
+        cleanupEventTap()
     }
 }
